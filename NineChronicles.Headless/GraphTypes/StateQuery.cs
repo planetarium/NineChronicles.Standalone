@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Bencodex.Types;
 using GraphQL;
 using GraphQL.Types;
@@ -166,6 +167,29 @@ namespace NineChronicles.Headless.GraphTypes
                     {
                         var order = OrderFactory.Deserialize((Dictionary) value);
                         return order;
+                    }
+
+                    return null;
+                }
+            );
+
+            Field<ListGraphType<OrderDigestType>>(
+                nameof(OrderDigestListState),
+                arguments: new QueryArguments(
+                    new QueryArgument<NonNullGraphType<AddressType>>
+                    {
+                        Name = "avatarAddress",
+                        Description = "avatar address"
+                    }
+                ),
+                resolve: context =>
+                {
+                    var avatarAddress = context.GetArgument<Address>("avatarAddress");
+                    var digestListAddress = OrderDigestListState.DeriveAddress(avatarAddress);
+                    if (context.Source.accountStateGetter(digestListAddress) is { } value)
+                    {
+                        var digestList = new OrderDigestListState((Dictionary) value);
+                        return digestList.OrderDigestList;
                     }
 
                     return null;
