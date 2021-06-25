@@ -8,9 +8,12 @@ using Libplanet;
 using Libplanet.Action;
 using Libplanet.Explorer.GraphTypes;
 using Nekoyume;
+using Nekoyume.Model.Item;
 using Nekoyume.Model.State;
 using Nekoyume.TableData;
 using NineChronicles.Headless.GraphTypes.States;
+using NineChronicles.Headless.GraphTypes.States.Models;
+using NineChronicles.Headless.GraphTypes.States.Models.Item.Enum;
 using NineChronicles.Headless.GraphTypes.States.Models.Order;
 using NineChronicles.Headless.GraphTypes.States.Models.Table;
 
@@ -57,12 +60,29 @@ namespace NineChronicles.Headless.GraphTypes
 
                     return null;
                 });
-            Field<ShopStateType>(
-                name: "shop",
-                description: "State for shop.",
-                resolve: context => context.Source.accountStateGetter(Addresses.Shop) is { } state
-                    ? new ShopState((Dictionary) state)
-                    : null);
+
+
+            Field<ShardedShopStateV2Type>(
+                "shop",
+                arguments: new QueryArguments(
+                    new QueryArgument<AddressType>
+                    {
+                        Name = "shopAddress",
+                        Description = "shop address"
+                    }
+                ),
+                resolve: context =>
+                {
+                    var shopAddress = context.GetArgument<Address>("shopAddress");
+                    if (context.Source.accountStateGetter(shopAddress) is { } value)
+                    {
+                        return new ShardedShopStateV2((Dictionary) value);
+                    }
+
+                    return null;
+                }
+            );
+
             Field<WeeklyArenaStateType>(
                 name: "weeklyArena",
                 description: "State for weekly arena.",
@@ -195,6 +215,29 @@ namespace NineChronicles.Headless.GraphTypes
                     return null;
                 }
             );
+
+            Field<NonNullGraphType<AddressType>>(
+                "DeriveShopAddress",
+                arguments: new QueryArguments(
+                    new QueryArgument<NonNullGraphType<ItemSubTypeEnumType>>
+                    {
+                        Name = "itemSubType",
+                        Description = "Item type"
+                    },
+                    new QueryArgument<NonNullGraphType<GuidGraphType>>
+                    {
+                        Name = "orderId",
+                        Description = "Order Guid."
+                    }
+                ),
+                resolve: context =>
+                {
+                    var itemSubType = context.GetArgument<ItemSubType>("itemSubType");
+                    var orderId = context.GetArgument<Guid>("orderId");
+                    return ShardedShopStateV2.DeriveAddress(itemSubType, orderId);
+                }
+            );
+
         }
     }
 }
