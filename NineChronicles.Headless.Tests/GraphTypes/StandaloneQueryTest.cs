@@ -217,6 +217,62 @@ namespace NineChronicles.Headless.Tests.GraphTypes
             Assert.Equal(expectedResult, result.Data);
         }
 
+        [Fact]
+        public async Task NodeStatusGetTopMostBlocks()
+        {
+            var userPrivateKey = new PrivateKey();
+            var userAddress = userPrivateKey.ToAddress();
+            var service = MakeMineChroniclesNodeService(userPrivateKey);
+            StandaloneContextFx.NineChroniclesNodeService = service;
+            StandaloneContextFx.BlockChain = service.Swarm?.BlockChain;
+
+            var blockChain = StandaloneContextFx.BlockChain;
+            for (int i = 0; i < 10; i++)
+            {
+                await blockChain!.MineBlock(userAddress);
+            }
+
+            var queryWithoutOffset = @"query {
+                nodeStatus {
+                    topmostBlocks(limit: 1) {
+                        index
+                    }
+                }
+            }";
+
+            var queryWithOffset = @"query {
+                nodeStatus {
+                    topmostBlocks(limit: 1 offset: 5) {
+                        index
+                    }
+                }
+            }";
+
+            var queryResult = await ExecuteQueryAsync(queryWithoutOffset);
+            var actualResult = queryResult.Data.As<Dictionary<string, object>>()["nodeStatus"]
+                .As<Dictionary<string, object>>()["topmostBlocks"];
+            var expectedResult = new List<object>
+            {
+                new Dictionary<string, object?>
+                {
+                    ["index"] = 10,
+                }
+            };
+            Assert.Equal(expectedResult, actualResult);
+
+            queryResult = await ExecuteQueryAsync(queryWithOffset);
+            actualResult = queryResult.Data.As<Dictionary<string, object>>()["nodeStatus"]
+                .As<Dictionary<string, object>>()["topmostBlocks"];
+            expectedResult = new List<object>
+            {
+                new Dictionary<string, object?>
+                {
+                    ["index"] = 5,
+                }
+            };
+            Assert.Equal(expectedResult, actualResult);
+        }
+
         [Theory]
         [InlineData(true)]
         [InlineData(false)]
