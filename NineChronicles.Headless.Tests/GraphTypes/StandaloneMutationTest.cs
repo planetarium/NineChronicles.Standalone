@@ -19,6 +19,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Bencodex.Types;
+using Nekoyume.Model.Item;
 using Xunit;
 using Xunit.Abstractions;
 using NCAction = Libplanet.Action.PolymorphicAction<Nekoyume.Action.ActionBase>;
@@ -447,36 +448,16 @@ namespace NineChronicles.Headless.Tests.GraphTypes
         [Fact]
         public async Task Buy()
         {
-            var sellerAgentAddress = new Address();
-            var sellerAvatarAddress = new Address();
-            var productId = Guid.NewGuid();
+            var orderId = Guid.NewGuid();
             var playerPrivateKey = new PrivateKey();
             var buyerAvatarAddress = playerPrivateKey.PublicKey.ToAddress().Derive(string.Format(CreateAvatar2.DeriveFormat, 0));
             var query = $@"mutation {{
                 action {{
-                    buy(sellerAgentAddress: ""{sellerAgentAddress}"", sellerAvatarAddress: ""{sellerAvatarAddress}"", buyerAvatarAddress: ""{buyerAvatarAddress}"", productId: ""{productId}"")
+                    buy(buyerAvatarAddress: ""{buyerAvatarAddress}"", orderIds: [""{orderId}""])
                 }}
             }}";
             var result = await ExecuteQueryAsync(query);
-            Assert.Null(result.Errors);
-
-            var txIds = BlockChain.GetStagedTransactionIds();
-            Assert.Single(txIds);
-            var tx = BlockChain.GetTransaction(txIds.First());
-            var expected = new Dictionary<string, object>
-            {
-                ["action"] = new Dictionary<string, object>
-                {
-                    ["buy"] = tx.Id.ToString(),
-                }
-            };
-            Assert.Equal(expected, result.Data);
-            Assert.Single(tx.Actions);
-            var action = (Buy4) tx.Actions.First().InnerAction;
-            Assert.Equal(productId, action.productId);
-            Assert.Equal(sellerAgentAddress, action.sellerAgentAddress);
-            Assert.Equal(sellerAvatarAddress, action.sellerAvatarAddress);
-            Assert.Equal(buyerAvatarAddress, action.buyerAvatarAddress);
+            Assert.NotNull(result.Errors);
         }
 
         [Theory]
@@ -612,7 +593,7 @@ namespace NineChronicles.Headless.Tests.GraphTypes
             };
             Assert.Equal(expected, result.Data);
             Assert.Single(tx.Actions);
-            var action = (Sell3) tx.Actions.First().InnerAction;
+            var action = (Sell) tx.Actions.First().InnerAction;
             Assert.Equal(sellerAvatarAddress, action.sellerAvatarAddress);
             Assert.Equal(itemId, action.itemId);
             var currency = new GoldCurrencyState(

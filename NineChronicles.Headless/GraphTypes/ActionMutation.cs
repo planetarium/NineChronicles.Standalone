@@ -11,7 +11,12 @@ using Nekoyume.Model.State;
 using Serilog;
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using Lib9c.Model.Order;
 using Libplanet.Action;
+using Nekoyume.Model.Item;
+using NineChronicles.Headless.GraphTypes.States.Models;
+using NineChronicles.Headless.GraphTypes.States.Models.Item.Enum;
 using NCAction = Libplanet.Action.PolymorphicAction<Nekoyume.Action.ActionBase>;
 
 namespace NineChronicles.Headless.GraphTypes
@@ -314,24 +319,15 @@ namespace NineChronicles.Headless.GraphTypes
                 arguments: new QueryArguments(
                     new QueryArgument<NonNullGraphType<AddressType>>
                     {
-                        Name = "sellerAgentAddress",
-                        Description = "Agent address from registered ShopItem."
-                    },
-                    new QueryArgument<NonNullGraphType<AddressType>>
-                    {
-                        Name = "sellerAvatarAddress",
-                        Description = "Avatar address from registered ShopItem."
-                    },
-                    new QueryArgument<NonNullGraphType<AddressType>>
-                    {
                         Name = "buyerAvatarAddress",
                         Description = "Avatar address."
                     },
-                    new QueryArgument<NonNullGraphType<GuidGraphType>>
+                    new QueryArgument<NonNullGraphType<ListGraphType<GuidGraphType>>>
                     {
-                        Name = "productId",
-                        Description = "ShopItem product ID."
-                    }),
+                        Name = "orderIds",
+                        Description = "Order Guid list from registered item."
+                    }
+                ),
                 resolve: context =>
                 {
                     try
@@ -347,16 +343,29 @@ namespace NineChronicles.Headless.GraphTypes
                         }
 
                         Address buyerAvatarAddress = context.GetArgument<Address>("buyerAvatarAddress");
-                        Address sellerAgentAddress = context.GetArgument<Address>("sellerAgentAddress");
-                        Address sellerAvatarAddress = context.GetArgument<Address>("sellerAvatarAddress");
-                        Guid productId = context.GetArgument<Guid>("productId");
+                        List<Guid> orderIds = context.GetArgument<List<Guid>>("orderIds");
 
-                        var action = new Buy4
+                        var purchaseInfos = new List<PurchaseInfo>();
+                        foreach (var orderId in orderIds)
+                        {
+                            var rawOrder = blockChain.GetState(Order.DeriveAddress(orderId));
+                            if (rawOrder is Dictionary dict)
+                            {
+                                var order = OrderFactory.Deserialize(dict);
+                                var purchaseInfo = new PurchaseInfo(orderId, order.TradableId, order.SellerAgentAddress,
+                                    order.SellerAvatarAddress, order.ItemSubType, order.Price);
+                                purchaseInfos.Add(purchaseInfo);
+                            }
+                            else
+                            {
+                                throw new OrderIdDoesNotExistException($"Can't find {orderId}");
+                            }
+                        }
+
+                        var action = new Buy
                         {
                             buyerAvatarAddress = buyerAvatarAddress,
-                            sellerAgentAddress = sellerAgentAddress,
-                            sellerAvatarAddress = sellerAvatarAddress,
-                            productId = productId,
+                            purchaseInfos = purchaseInfos,
                         };
 
                         var actions = new NCAction[] { action };
