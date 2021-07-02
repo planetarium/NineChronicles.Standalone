@@ -390,14 +390,25 @@ namespace NineChronicles.Headless.GraphTypes
                     },
                     new QueryArgument<NonNullGraphType<GuidGraphType>>
                     {
-                        Name = "itemId",
+                        Name = "tradableId",
                         Description = "Item Guid to register on shop."
                     },
                     new QueryArgument<NonNullGraphType<IntGraphType>>
                     {
                         Name = "price",
                         Description = "Item selling price."
-                    }),
+                    },
+                    new QueryArgument<NonNullGraphType<ItemSubTypeEnumType>>
+                    {
+                        Name = "itemSubType",
+                        Description = "Item type."
+                    },
+                    new QueryArgument<IntGraphType>
+                    {
+                        Name = "count",
+                        Description = "Item selling count. default 1."
+                    }
+                ),
                 resolve: context =>
                 {
                     try
@@ -413,17 +424,48 @@ namespace NineChronicles.Headless.GraphTypes
                         }
 
                         Address sellerAvatarAddress = context.GetArgument<Address>("sellerAvatarAddress");
-                        Guid itemId = context.GetArgument<Guid>("itemId");
+                        Guid tradableId = context.GetArgument<Guid>("tradableId");
                         var currency = new GoldCurrencyState(
                             (Dictionary)blockChain.GetState(GoldCurrencyState.Address)
                         ).Currency;
                         FungibleAssetValue price = currency * context.GetArgument<int>("price");
+                        var itemSubtype = context.GetArgument<ItemSubType>("itemSubType");
+                        var count = context.GetArgument("count", 1);
 
-                        var action = new Sell3
+                        switch (itemSubtype)
+                        {
+                            case ItemSubType.Food:
+                            case ItemSubType.FullCostume:
+                            case ItemSubType.HairCostume:
+                            case ItemSubType.EarCostume:
+                            case ItemSubType.EyeCostume:
+                            case ItemSubType.TailCostume:
+                            case ItemSubType.Weapon:
+                            case ItemSubType.Armor:
+                            case ItemSubType.Belt:
+                            case ItemSubType.Necklace:
+                            case ItemSubType.Ring:
+                            case ItemSubType.Title:
+                            case ItemSubType.EquipmentMaterial:
+                                if (count != 1)
+                                {
+                                    throw new InvalidItemCountException();
+                                }
+                                break;
+                            case ItemSubType.Hourglass:
+                            case ItemSubType.ApStone:
+                                break;
+                            default:
+                                throw new InvalidItemTypeException($"{itemSubtype} does not support yet.");
+                        }
+
+                        var action = new Sell
                         {
                             sellerAvatarAddress = sellerAvatarAddress,
-                            itemId = itemId,
-                            price = price
+                            tradableId = tradableId,
+                            price = price,
+                            count = count,
+                            itemSubType = itemSubtype,
                         };
 
                         var actions = new NCAction[] { action };

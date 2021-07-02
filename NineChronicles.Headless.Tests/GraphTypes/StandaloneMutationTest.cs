@@ -570,12 +570,12 @@ namespace NineChronicles.Headless.Tests.GraphTypes
 
         [Theory]
         [MemberData(nameof(SellMember))]
-        public async Task Sell(Address sellerAvatarAddress, Guid itemId, int price)
+        public async Task SellNonFungible(Address sellerAvatarAddress, Guid tradableId, int price, ItemSubType itemSubType)
         {
             var playerPrivateKey = new PrivateKey();
             var query = $@"mutation {{
                 action {{
-                    sell(sellerAvatarAddress: ""{sellerAvatarAddress}"", itemId: ""{itemId}"", price: {price})
+                    sell(sellerAvatarAddress: ""{sellerAvatarAddress}"", tradableId: ""{tradableId}"", price: {price}, itemSubType: {itemSubType})
                 }}
             }}";
             var result = await ExecuteQueryAsync(query);
@@ -595,7 +595,9 @@ namespace NineChronicles.Headless.Tests.GraphTypes
             Assert.Single(tx.Actions);
             var action = (Sell) tx.Actions.First().InnerAction;
             Assert.Equal(sellerAvatarAddress, action.sellerAvatarAddress);
-            Assert.Equal(itemId, action.itemId);
+            Assert.Equal(tradableId, action.tradableId);
+            Assert.Equal(itemSubType, action.itemSubType);
+            Assert.Equal(1, action.count);
             var currency = new GoldCurrencyState(
                 (Dictionary)BlockChain.GetState(GoldCurrencyState.Address)
             ).Currency;
@@ -610,12 +612,14 @@ namespace NineChronicles.Headless.Tests.GraphTypes
                 new Address(),
                 Guid.NewGuid(),
                 0,
+                ItemSubType.Armor,
             },
             new object?[]
             {
                 new Address(),
                 Guid.NewGuid(),
                 100,
+                ItemSubType.Weapon,
             },
         };
 
