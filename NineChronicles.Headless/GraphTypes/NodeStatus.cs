@@ -49,6 +49,12 @@ namespace NineChronicles.Headless.GraphTypes
                         Name = "limit",
                         Description = "The number of blocks to get."
                     },
+                    new QueryArgument<IntGraphType>
+                    {
+                        Name = "offset",
+                        Description = "The number of blocks to skip from tip.",
+                        DefaultValue = 0,
+                    },
                     new QueryArgument<AddressType>
                     {
                         Name = "miner",
@@ -66,7 +72,7 @@ namespace NineChronicles.Headless.GraphTypes
                     }
 
                     IEnumerable<Block<NCAction>> blocks =
-                        GetTopmostBlocks(context.BlockChain);
+                        GetTopmostBlocks(context.BlockChain, fieldContext.GetArgument<int>("offset"));
                     if (fieldContext.GetArgument<Address?>("miner") is { } miner)
                     {
                         blocks = blocks.Where(b => b.Miner.Equals(miner));
@@ -122,10 +128,19 @@ namespace NineChronicles.Headless.GraphTypes
             );
         }
 
-        private IEnumerable<Block<T>> GetTopmostBlocks<T>(BlockChain<T> blockChain)
+        private IEnumerable<Block<T>> GetTopmostBlocks<T>(BlockChain<T> blockChain, int offset)
             where T : IAction, new()
         {
             Block<T> block = blockChain.Tip;
+
+            while (offset > 0)
+            {
+                offset--;
+                if (block.PreviousHash is { } prev)
+                {
+                    block = blockChain[prev];
+                }
+            }
 
             while (true)
             {
