@@ -17,8 +17,24 @@ namespace NineChronicles.Headless.Tests
             StandaloneContext? standaloneContext = null)
             where TObjectGraphType : class, IObjectGraphType
         {
+            return ExecuteQueryAsync(
+                typeof(TObjectGraphType),
+                query,
+                userContext,
+                source,
+                standaloneContext
+            );
+        }
+
+        public static Task<ExecutionResult> ExecuteQueryAsync(
+            Type objectGraphType,
+            string query,
+            IDictionary<string, object>? userContext = null,
+            object? source = null,
+            StandaloneContext? standaloneContext = null)
+        {
             var services = new ServiceCollection();
-            services.AddSingleton(typeof(TObjectGraphType));
+            services.AddSingleton(objectGraphType);
             if (!(standaloneContext is null))
             {
                 services.AddSingleton(standaloneContext);
@@ -27,13 +43,14 @@ namespace NineChronicles.Headless.Tests
             services.AddLibplanetExplorer<NCAction>();
 
             var serviceProvider = services.BuildServiceProvider();
-            return ExecuteQueryAsync<TObjectGraphType>(
+            return ExecuteQueryAsync(
+                objectGraphType,
                 serviceProvider,
                 query,
                 userContext,
                 source);
         }
-        
+
         public static Task<ExecutionResult> ExecuteQueryAsync<TObjectGraphType>(
             IServiceProvider serviceProvider,
             string query,
@@ -41,7 +58,17 @@ namespace NineChronicles.Headless.Tests
             object? source = null)
             where TObjectGraphType : IObjectGraphType
         {
-            var graphType = (IObjectGraphType)serviceProvider.GetService(typeof(TObjectGraphType));
+            return ExecuteQueryAsync(typeof(TObjectGraphType), serviceProvider, query, userContext, source);
+        }
+
+        public static Task<ExecutionResult> ExecuteQueryAsync(
+            Type objectGraphType,
+            IServiceProvider serviceProvider,
+            string query,
+            IDictionary<string, object>? userContext = null,
+            object? source = null)
+        {
+            var graphType = (IObjectGraphType)serviceProvider.GetService(objectGraphType);
             var documentExecutor = new DocumentExecuter();
             return documentExecutor.ExecuteAsync(new ExecutionOptions
             {

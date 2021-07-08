@@ -11,7 +11,12 @@ using Nekoyume.Model.State;
 using Serilog;
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using Lib9c.Model.Order;
 using Libplanet.Action;
+using Nekoyume.Model.Item;
+using NineChronicles.Headless.GraphTypes.States.Models;
+using NineChronicles.Headless.GraphTypes.States.Models.Item.Enum;
 using NCAction = Libplanet.Action.PolymorphicAction<Nekoyume.Action.ActionBase>;
 
 namespace NineChronicles.Headless.GraphTypes
@@ -74,7 +79,7 @@ namespace NineChronicles.Headless.GraphTypes
                         var lensIndex = context.GetArgument<int>("lensIndex");
                         var earIndex = context.GetArgument<int>("earIndex");
                         var tailIndex = context.GetArgument<int>("tailIndex");
-                        var action = new CreateAvatar2
+                        var action = new CreateAvatar
                         {
                             index = avatarIndex,
                             hair = hairIndex,
@@ -160,7 +165,7 @@ namespace NineChronicles.Headless.GraphTypes
                         List<Guid> equipmentIds = context.GetArgument<List<Guid>>("equipmentIds") ?? new List<Guid>();
                         List<Guid> consumableIds = context.GetArgument<List<Guid>>("consumableIds") ?? new List<Guid>();
 
-                        var action = new HackAndSlash4
+                        var action = new HackAndSlash
                         {
                             avatarAddress = avatarAddress,
                             worldId = worldId,
@@ -224,7 +229,7 @@ namespace NineChronicles.Headless.GraphTypes
                         int? subRecipeId = context.GetArgument<int?>("subRecipeId");
                         Address avatarAddress = context.GetArgument<Address>("avatarAddress");
 
-                        var action = new CombinationEquipment4
+                        var action = new CombinationEquipment
                         {
                             AvatarAddress = avatarAddress,
                             RecipeId = recipeId,
@@ -288,7 +293,7 @@ namespace NineChronicles.Headless.GraphTypes
                         Address avatarAddress = context.GetArgument<Address>("avatarAddress");
                         int slotIndex = context.GetArgument<int>("slotIndex");
 
-                        var action = new ItemEnhancement5
+                        var action = new ItemEnhancement
                         {
                             avatarAddress = avatarAddress,
                             slotIndex = slotIndex,
@@ -314,24 +319,15 @@ namespace NineChronicles.Headless.GraphTypes
                 arguments: new QueryArguments(
                     new QueryArgument<NonNullGraphType<AddressType>>
                     {
-                        Name = "sellerAgentAddress",
-                        Description = "Agent address from registered ShopItem."
-                    },
-                    new QueryArgument<NonNullGraphType<AddressType>>
-                    {
-                        Name = "sellerAvatarAddress",
-                        Description = "Avatar address from registered ShopItem."
-                    },
-                    new QueryArgument<NonNullGraphType<AddressType>>
-                    {
                         Name = "buyerAvatarAddress",
                         Description = "Avatar address."
                     },
-                    new QueryArgument<NonNullGraphType<GuidGraphType>>
+                    new QueryArgument<NonNullGraphType<ListGraphType<GuidGraphType>>>
                     {
-                        Name = "productId",
-                        Description = "ShopItem product ID."
-                    }),
+                        Name = "orderIds",
+                        Description = "Order Guid list from registered item."
+                    }
+                ),
                 resolve: context =>
                 {
                     try
@@ -347,16 +343,29 @@ namespace NineChronicles.Headless.GraphTypes
                         }
 
                         Address buyerAvatarAddress = context.GetArgument<Address>("buyerAvatarAddress");
-                        Address sellerAgentAddress = context.GetArgument<Address>("sellerAgentAddress");
-                        Address sellerAvatarAddress = context.GetArgument<Address>("sellerAvatarAddress");
-                        Guid productId = context.GetArgument<Guid>("productId");
+                        List<Guid> orderIds = context.GetArgument<List<Guid>>("orderIds");
 
-                        var action = new Buy4
+                        var purchaseInfos = new List<PurchaseInfo>();
+                        foreach (var orderId in orderIds)
+                        {
+                            var rawOrder = blockChain.GetState(Order.DeriveAddress(orderId));
+                            if (rawOrder is Dictionary dict)
+                            {
+                                var order = OrderFactory.Deserialize(dict);
+                                var purchaseInfo = new PurchaseInfo(orderId, order.TradableId, order.SellerAgentAddress,
+                                    order.SellerAvatarAddress, order.ItemSubType, order.Price);
+                                purchaseInfos.Add(purchaseInfo);
+                            }
+                            else
+                            {
+                                throw new OrderIdDoesNotExistException($"Can't find {orderId}");
+                            }
+                        }
+
+                        var action = new Buy
                         {
                             buyerAvatarAddress = buyerAvatarAddress,
-                            sellerAgentAddress = sellerAgentAddress,
-                            sellerAvatarAddress = sellerAvatarAddress,
-                            productId = productId,
+                            purchaseInfos = purchaseInfos,
                         };
 
                         var actions = new NCAction[] { action };
@@ -381,14 +390,25 @@ namespace NineChronicles.Headless.GraphTypes
                     },
                     new QueryArgument<NonNullGraphType<GuidGraphType>>
                     {
-                        Name = "itemId",
+                        Name = "tradableId",
                         Description = "Item Guid to register on shop."
                     },
                     new QueryArgument<NonNullGraphType<IntGraphType>>
                     {
                         Name = "price",
                         Description = "Item selling price."
-                    }),
+                    },
+                    new QueryArgument<NonNullGraphType<ItemSubTypeEnumType>>
+                    {
+                        Name = "itemSubType",
+                        Description = "Item type."
+                    },
+                    new QueryArgument<IntGraphType>
+                    {
+                        Name = "count",
+                        Description = "Item selling count. default 1."
+                    }
+                ),
                 resolve: context =>
                 {
                     try
@@ -404,17 +424,48 @@ namespace NineChronicles.Headless.GraphTypes
                         }
 
                         Address sellerAvatarAddress = context.GetArgument<Address>("sellerAvatarAddress");
-                        Guid itemId = context.GetArgument<Guid>("itemId");
+                        Guid tradableId = context.GetArgument<Guid>("tradableId");
                         var currency = new GoldCurrencyState(
                             (Dictionary)blockChain.GetState(GoldCurrencyState.Address)
                         ).Currency;
                         FungibleAssetValue price = currency * context.GetArgument<int>("price");
+                        var itemSubtype = context.GetArgument<ItemSubType>("itemSubType");
+                        var count = context.GetArgument("count", 1);
 
-                        var action = new Sell3
+                        switch (itemSubtype)
+                        {
+                            case ItemSubType.Food:
+                            case ItemSubType.FullCostume:
+                            case ItemSubType.HairCostume:
+                            case ItemSubType.EarCostume:
+                            case ItemSubType.EyeCostume:
+                            case ItemSubType.TailCostume:
+                            case ItemSubType.Weapon:
+                            case ItemSubType.Armor:
+                            case ItemSubType.Belt:
+                            case ItemSubType.Necklace:
+                            case ItemSubType.Ring:
+                            case ItemSubType.Title:
+                            case ItemSubType.EquipmentMaterial:
+                                if (count != 1)
+                                {
+                                    throw new InvalidItemCountException();
+                                }
+                                break;
+                            case ItemSubType.Hourglass:
+                            case ItemSubType.ApStone:
+                                break;
+                            default:
+                                throw new InvalidItemTypeException($"{itemSubtype} does not support yet.");
+                        }
+
+                        var action = new Sell
                         {
                             sellerAvatarAddress = sellerAvatarAddress,
-                            itemId = itemId,
-                            price = price
+                            tradableId = tradableId,
+                            price = price,
+                            count = count,
+                            itemSubType = itemSubtype,
                         };
 
                         var actions = new NCAction[] { action };
@@ -505,7 +556,7 @@ namespace NineChronicles.Headless.GraphTypes
                         int slotIndex = context.GetArgument<int>("slotIndex");
                         Address avatarAddress = context.GetArgument<Address>("avatarAddress");
 
-                        var action = new CombinationConsumable3
+                        var action = new CombinationConsumable
                         {
                             AvatarAddress = avatarAddress,
                             recipeId = recipeId,
