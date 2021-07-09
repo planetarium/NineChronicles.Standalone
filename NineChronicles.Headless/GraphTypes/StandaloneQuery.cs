@@ -195,43 +195,6 @@ namespace NineChronicles.Headless.GraphTypes
                 }
             );
 
-            Field<NonNullGraphType<LongGraphType>>(
-                name: "nextTxNonce",
-                arguments: new QueryArguments(
-                    new QueryArgument<NonNullGraphType<AddressType>> { Name = "address", Description = "Target address to query" }
-                ),
-                resolve: context =>
-                {
-                    if (!(standaloneContext.BlockChain is BlockChain<PolymorphicAction<ActionBase>> blockChain))
-                    {
-                        throw new ExecutionError(
-                            $"{nameof(StandaloneContext)}.{nameof(StandaloneContext.BlockChain)} was not set yet!");
-                    }
-
-                    Address address = context.GetArgument<Address>("address");
-                    return blockChain.GetNextTxNonce(address);
-                }
-            );
-
-            Field<TransactionType<NCAction>>(
-                name: "getTx",
-                arguments: new QueryArguments(
-                    new QueryArgument<NonNullGraphType<TxIdType>>
-                        {Name = "txId", Description = "transaction id."}
-                ),
-                resolve: context =>
-                {
-                    if (!(standaloneContext.BlockChain is BlockChain<PolymorphicAction<ActionBase>> blockChain))
-                    {
-                        throw new ExecutionError(
-                            $"{nameof(StandaloneContext)}.{nameof(StandaloneContext.BlockChain)} was not set yet!");
-                    }
-
-                    var txId = context.GetArgument<TxId>("txId");
-                    return blockChain.GetTransaction(txId);
-                }
-            );
-
             Field<AddressType>(
                 name: "minerAddress",
                 description: "Address of current node.",
@@ -292,6 +255,12 @@ namespace NineChronicles.Headless.GraphTypes
                     throw new ExecutionError(
                         $"{nameof(AgentState)} Address: {agentAddress} is null.");
                 });
+
+            Field<NonNullGraphType<TransactionHeadlessQuery>>(
+                name: "transaction",
+                description: "Query for transaction.",
+                resolve: context => new TransactionHeadlessQuery(standaloneContext)
+            );
         }
     }
 }

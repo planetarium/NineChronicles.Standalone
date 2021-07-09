@@ -848,8 +848,8 @@ namespace NineChronicles.Headless.Tests.GraphTypes
                     genesis.Hash,
                     new PolymorphicAction<ActionBase>[] { }
                 );
-            string hexEncoded = ByteUtil.Hex(tx.Serialize(true));
-            query = $"mutation {{ stageTx(payload: \"{hexEncoded}\") }}";
+            string base64Encoded = Convert.ToBase64String(tx.Serialize(true));
+            query = $"mutation {{ stageTx(payload: \"{base64Encoded}\") }}";
             result = await ExecuteQueryAsync(query);
             Assert.Null(result.Errors);
             Assert.Equal(
